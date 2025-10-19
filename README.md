@@ -3,14 +3,15 @@
 ![Swift 6.0+](https://img.shields.io/badge/Swift-6.0+-orange.svg)
 ![Platforms](https://img.shields.io/badge/Platforms-macOS%2013+%20%7C%20iOS%2016+-blue.svg)
 
-A flexible, configurable logging middleware for OpenAPI client and server implementations with support for both console and file logging.
+A flexible, configurable logging middleware for OpenAPI client and server implementations with support for console, file, and OSLog logging.
 
 ## Features
 
 - ✅ **Dual Parameter System**: Separate `appName` and `logPrefix` for clean file naming and formatted console output
 - ✅ **Client & Server Support**: Works with both `ClientMiddleware` and `ServerMiddleware`
 - ✅ **Configurable Body Logging**: Control how much request/response body data to log
-- ✅ **Multiple Log Handlers**: Simultaneous console (stream) and JSON file logging
+- ✅ **Multiple Log Handlers**: Simultaneous console (stream), JSON file, and OSLog logging
+- ✅ **OSLog Integration**: Native Apple unified logging system support (macOS 11+, iOS 14+)
 - ✅ **Automatic File Naming**: Generates clean filenames from app name and prefix
 
 ## Usage
@@ -94,14 +95,97 @@ Structured JSON logs saved to Documents directory:
 ]
 ```
 
+### OSLog Output (macOS 11+, iOS 14+)
+Native Apple unified logging system integration. Logs appear in:
+- **Console.app** on macOS
+- **Xcode Console** during development
+- System log database for persistent storage
+
+**Subsystem**: `com.openapi`
+**Category**: `logging-middleware`
+
+#### Viewing OSLog Output
+
+##### Real-Time Log Streaming
+
+**Method 1: Terminal (Recommended for Development)**
+
+Open Terminal and run:
+```bash
+# Stream ALL logs from the middleware in real-time
+log stream --predicate 'subsystem == "com.openapi"' --level debug
+```
+
+This will show logs **as they happen** - you'll see each API request/response immediately.
+
+**Additional real-time filters:**
+```bash
+# Filter by specific prefix (e.g., only APIClient logs)
+log stream --predicate 'subsystem == "com.openapi" AND eventMessage CONTAINS "APIClient"' --level debug
+
+# Show only errors in real-time
+log stream --predicate 'subsystem == "com.openapi"' --level error
+
+# Filter by specific HTTP method
+log stream --predicate 'subsystem == "com.openapi" AND eventMessage CONTAINS "GET"' --level debug
+```
+
+**Method 2: Console.app (GUI)**
+
+For a visual real-time log viewer:
+1. Open **Console.app** (press `⌘+Space`, type "Console", press Enter)
+2. In the left sidebar, select your Mac under "Devices"
+3. In the search field (top-right), type: `subsystem:com.openapi`
+4. Click the **"Start"** button to begin streaming logs in real-time
+5. Logs will appear **live** as your app makes API calls
+
+**Tip:** Keep Console.app open while running your app to see all logs in real-time with syntax highlighting!
+
+##### Historical Logs
+
+**View past logs in Terminal:**
+```bash
+# Show logs from the last hour
+log show --predicate 'subsystem == "com.openapi"' --last 1h
+
+# Show logs with specific text
+log show --predicate 'subsystem == "com.openapi" AND eventMessage CONTAINS "GET"' --last 30m
+
+# Export logs to a file
+log show --predicate 'subsystem == "com.openapi"' --last 1d --style json > logs.json
+```
+
+**Log Level Mapping:**
+
+| swift-log Level | OSLog Type | Console.app Display |
+|----------------|-----------|---------------------|
+| `.trace` | `.debug` | Debug |
+| `.debug` | `.debug` | Debug |
+| `.info` | `.info` | Info |
+| `.notice` | `.default` | Default |
+| `.warning` | `.error` | Error |
+| `.error` | `.error` | Error |
+| `.critical` | `.fault` | Fault |
+
+**Privacy & Performance:**
+- OSLog is highly optimized for performance
+- Logs are stored in a compressed binary format
+- Automatic log rotation and retention policies
+- System-level privacy controls for sensitive data
+
 ## Architecture
 
 The middleware uses a `MultiplexLogHandler` to direct log output to multiple destinations simultaneously. By default, it's configured with:
 
-- **`StreamLogHandler`**: Prints formatted logs to the console (or any specified stream).
+- **`StreamLogHandler`**: Prints formatted logs to the console (stdout).
 - **`JSONFileLogHandler`**: Saves structured JSON logs to a file in the app's Documents directory.
+- **`OSLogHandler`**: Sends logs to Apple's unified logging system (macOS 11+, iOS 14+).
 
-This architecture makes it easy to monitor logs in real-time during development while also persisting them for later analysis.
+This architecture makes it easy to:
+- Monitor logs in real-time during development (console & OSLog)
+- Persist structured logs for analysis (JSON files)
+- Integrate with system-level logging tools (Console.app, `log` command)
+- Debug production issues using native Apple tools
 
 ## Body Logging Policy
 
@@ -128,12 +212,20 @@ Each log entry includes:
 - Error information (if failed)
 - Unique identifier per request
 
-## File Locations
+## Log Destinations
 
+### File Locations
 Log files are saved to the system Documents directory:
 - **iOS/macOS**: `~/Documents/`
 - **JSON logs**: `_<appName>_<prefix>.json`
-- **Stream logs**: Currently output to console
+
+### Console Output
+- **Stream logs**: Output to `stdout` (Xcode Console, Terminal)
+
+### OSLog (macOS 11+, iOS 14+)
+- **System database**: Managed by `logd` daemon
+- **Location**: `/var/db/diagnostics/` (system-managed, not user-accessible)
+- **Access**: Use `Console.app` or `log` command (see [Viewing OSLog Output](#viewing-oslog-output))
 
 ## Example Integration
 
