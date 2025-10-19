@@ -1,5 +1,8 @@
 # OpenAPI Logging Middleware
 
+![Swift 6.0+](https://img.shields.io/badge/Swift-6.0+-orange.svg)
+![Platforms](https://img.shields.io/badge/Platforms-macOS%2013+%20%7C%20iOS%2016+-blue.svg)
+
 A flexible, configurable logging middleware for OpenAPI client and server implementations with support for both console and file logging.
 
 ## Features
@@ -171,3 +174,4 @@ The `LoggingMiddleware` is an `actor`, ensuring thread-safe operation across con
 - `swift-openapi-runtime` - OpenAPI runtime support
 - `swift-log` - Logging backend
 - `HTTPTypes` - HTTP types
+
