@@ -1,16 +1,15 @@
 import Foundation
 import Logging
 
-final class JSONFileLogHandler: LogHandler, @unchecked Sendable {
+/// Thread safety provided by MultiplexLogHandler's serial queue synchronization
+final class JSONFileLogHandler: LogHandler {
     let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-
-    var requestLog: [[String: Any]] = []
 
     private let label: String
     private let fileHandle: FileHandle
     private let logFileURL: URL
     private let logFileName: String
-    private var _logLevel: Logger.Level = .info
+    nonisolated(unsafe) private var _logLevel: Logger.Level = .info
     private let logPrefix: String
 
     init(label: String, logFileURL: URL, logPrefix: String = "") {
@@ -43,7 +42,7 @@ final class JSONFileLogHandler: LogHandler, @unchecked Sendable {
         set { metadata[key] = newValue }
     }
 
-    var metadata: Logger.Metadata = [:]
+    nonisolated(unsafe) var metadata: Logger.Metadata = [:]
 
     var logLevel: Logger.Level {
         get { self._logLevel }
@@ -85,21 +84,21 @@ final class JSONFileLogHandler: LogHandler, @unchecked Sendable {
             }
         }
 
-        loadExistingLogs()
-        requestLog.append(logEntry)
-        saveLogAsJSON()
+        var existingLogs = loadExistingLogs()
+        existingLogs.append(logEntry)
+        saveLogAsJSON(existingLogs)
     }
 }
 
 private extension JSONFileLogHandler {
 
-    func saveLogAsJSON() {
+    func saveLogAsJSON(_ logs: [[String: Any]]) {
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
         let logFileURL = documentsPath.appendingPathComponent(logFileName)
 
         do {
-            // Convert the `requestLog` array to JSON data
-            let jsonData = try JSONSerialization.data(withJSONObject: requestLog, options: .prettyPrinted)
+            // Convert the `logs` array to JSON data
+            let jsonData = try JSONSerialization.data(withJSONObject: logs, options: .prettyPrinted)
 
             // Overwrite the file by writing the JSON data
             try jsonData.write(to: logFileURL, options: .atomic)
@@ -109,13 +108,13 @@ private extension JSONFileLogHandler {
         }
     }
 
-    func loadExistingLogs() {
+    func loadExistingLogs() -> [[String: Any]] {
         let logFileURL = documentsPath.appendingPathComponent(logFileName)
-
         if let data = try? Data(contentsOf: logFileURL),
            let existingLogs = try? JSONSerialization.jsonObject(with: data, options: []) as? [[String: Any]] {
-            requestLog = existingLogs // Add previous logs to the in-memory array
+            return existingLogs
         }
+        return []
     }
 }
 

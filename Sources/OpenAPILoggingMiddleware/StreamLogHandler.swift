@@ -1,10 +1,11 @@
 import Foundation
 import Logging
 
-final class StreamLogHandler: LogHandler, @unchecked Sendable {
+/// Thread safety provided by MultiplexLogHandler's serial queue synchronization
+final class StreamLogHandler: LogHandler {
     private let label: String
-    private var _logLevel: Logger.Level = .info
-    var stream: TextOutputStream
+    nonisolated(unsafe) private var _logLevel: Logger.Level = .info
+    nonisolated(unsafe) var stream: TextOutputStream
     private let logPrefix: String
 
     init(label: String, stream: TextOutputStream = StandardOutputStream(), logPrefix: String = "") {
@@ -18,7 +19,7 @@ final class StreamLogHandler: LogHandler, @unchecked Sendable {
         set { _logLevel = newValue }
     }
 
-    var metadata: Logger.Metadata = [:]
+    nonisolated(unsafe) var metadata: Logger.Metadata = [:]
 
     subscript(metadataKey key: String) -> Logger.Metadata.Value? {
         get { return metadata[key] }
