@@ -73,17 +73,32 @@ public actor LoggingMiddleware {
         return JSONFileLogHandler(label: label, logFileURL: logFileURL, logPrefix: logPrefix)
     }
 
+    #if canImport(OSLog)
+    @available(macOS 11.0, iOS 14.0, watchOS 7.0, tvOS 14.0, *)
+    private static func createOSLogHandler(subsystem: String, category: String, logPrefix: String) -> OSLogHandler {
+        return OSLogHandler(subsystem: subsystem, category: category, logPrefix: logPrefix)
+    }
+    #endif
+
     // MARK: Default Logger -
 
     private static func defaultLogger(logPrefix: String, jsonLogFileName: String) -> Logger {
         let label = "com.openapi.logger"
 
-        // Set up the logger with a multiplex log handler that includes both file and stream handlers
+        // Set up the logger with a multiplex log handler that includes stream, file, and OSLog handlers
         var logger = Logger(label: label, factory: { _ in
-            MultiplexLogHandler(handlers: [
+            var handlers: [LogHandler] = [
                 createStreamLogHandler(label: label, logPrefix: logPrefix),
                 createJSONFileLogHandler(label: label, logPrefix: logPrefix, jsonLogFileName: jsonLogFileName)
-            ])
+            ]
+
+            #if canImport(OSLog)
+            if #available(macOS 11.0, iOS 14.0, watchOS 7.0, tvOS 14.0, *) {
+                handlers.append(createOSLogHandler(subsystem: "com.openapi", category: "logging-middleware", logPrefix: logPrefix))
+            }
+            #endif
+
+            return MultiplexLogHandler(handlers: handlers)
         })
         logger.logLevel = .debug // Set the desired log level
         return logger
