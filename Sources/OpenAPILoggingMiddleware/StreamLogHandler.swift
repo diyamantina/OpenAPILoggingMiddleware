@@ -64,8 +64,8 @@ final class StreamLogHandler: LogHandler {
 }
 
 // Standard output stream
-struct StandardOutputStream: TextOutputStream {
+struct StandardOutputStream: TextOutputStream, @unchecked Sendable {
     func write(_ string: String) {
-        fputs(string, stdout)
+        print(string, terminator: "")
     }
 }
