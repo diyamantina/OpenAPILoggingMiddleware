@@ -1,0 +1,77 @@
+import Testing
+import Foundation
+import Logging
+@testable import OpenAPILoggingMiddleware
+
+@Suite("StreamLogHandler")
+struct StreamLogHandlerTests {
+
+    // MARK: - StandardOutputStream
+
+    @Test("StandardOutputStream conforms to TextOutputStream")
+    func standardOutputStreamConforms() {
+        let stream = StandardOutputStream()
+        var mutableStream: TextOutputStream = stream
+        mutableStream.write("test")
+    }
+
+    // MARK: - Custom Stream Capture
+
+    final class CapturedOutputStream: TextOutputStream, @unchecked Sendable {
+        var captured = ""
+        func write(_ string: String) {
+            captured += string
+        }
+    }
+
+    @Test("StreamLogHandler writes metadata to stream")
+    func streamLogHandlerWritesMetadata() {
+        let capture = CapturedOutputStream()
+        var handler = StreamLogHandler(label: "test", stream: capture, logPrefix: "[PREFIX]")
+        handler.log(
+            level: .info,
+            message: "test message",
+            metadata: ["key": "value"],
+            source: "test",
+            file: #file,
+            function: #function,
+            line: #line
+        )
+        #expect(capture.captured.contains("`key`"))
+        #expect(capture.captured.contains("`value`"))
+        #expect(capture.captured.contains("[PREFIX]"))
+    }
+
+    @Test("StreamLogHandler skips logging when metadata is nil")
+    func streamLogHandlerSkipsNilMetadata() {
+        let capture = CapturedOutputStream()
+        var handler = StreamLogHandler(label: "test", stream: capture)
+        handler.log(
+            level: .info,
+            message: "test",
+            metadata: nil,
+            source: "test",
+            file: #file,
+            function: #function,
+            line: #line
+        )
+        #expect(capture.captured.isEmpty)
+    }
+
+    @Test("StreamLogHandler log level get/set")
+    func streamLogHandlerLogLevel() {
+        var handler = StreamLogHandler(label: "test")
+        handler.logLevel = .debug
+        #expect(handler.logLevel == .debug)
+        handler.logLevel = .error
+        #expect(handler.logLevel == .error)
+    }
+
+    @Test("StreamLogHandler metadata get/set")
+    func streamLogHandlerMetadata() {
+        var handler = StreamLogHandler(label: "test")
+        handler[metadataKey: "foo"] = "bar"
+        #expect(handler[metadataKey: "foo"] == "bar")
+        #expect(handler[metadataKey: "missing"] == nil)
+    }
+}

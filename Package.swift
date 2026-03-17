@@ -25,6 +25,14 @@ let package = Package(
                 .product(name: "OpenAPIRuntime", package: "swift-openapi-runtime"),
                 .product(name: "Logging", package: "swift-log")
             ]
-        )
+        ),
+        .testTarget(
+            name: "OpenAPILoggingMiddlewareTests",
+            dependencies: [
+                "OpenAPILoggingMiddleware",
+                .product(name: "OpenAPIRuntime", package: "swift-openapi-runtime"),
+                .product(name: "Logging", package: "swift-log"),
+            ]
+        ),
     ]
 )
