@@ -13,6 +13,8 @@ A flexible, configurable logging middleware for OpenAPI client and server implem
 - ✅ **Multiple Log Handlers**: Simultaneous console (stream), JSON file, and OSLog logging
 - ✅ **OSLog Integration**: Native Apple unified logging system support (macOS 11+, iOS 14+)
 - ✅ **Automatic File Naming**: Generates clean filenames from app name and prefix
+- ✅ **Pluggable Handlers** *(v1.2.0)*: Ship log events to any sink via `ObserverLogHandler`
+- ✅ **Per-Event Log Levels** *(v1.2.0)*: Configure `requestLogLevel`, `responseLogLevel`, `errorLogLevel` independently
 
 ## Usage
 
@@ -38,11 +40,48 @@ let serverMiddleware = await LoggingMiddleware(
 
 ```swift
 let middleware = LoggingMiddleware(
-    logger: customLogger,                              // Optional custom logger
+    logger: customLogger,                               // Optional custom logger
     bodyLoggingConfiguration: .upTo(maxBytes: 2_000_000), // Log bodies up to 2MB
-    appName: "MyApp",                                  // App identifier for files
-    logPrefix: "🔧 Service: "                          // Console output prefix
+    appName: "MyApp",                                   // App identifier for files
+    logPrefix: "🔧 Service: ",                          // Console output prefix
+    requestLogLevel: .debug,                            // v1.2.0+: per-event level
+    responseLogLevel: .debug,
+    errorLogLevel: .error                               // v1.2.0+: errors at .error by default
 )
+```
+
+### Extensibility (v1.2.0+)
+
+All built-in handlers are public. Plug a custom sink (admin panel, WebSocket
+broadcast, analytics pipeline, test harness) alongside the defaults using
+Apple's `Logging.MultiplexLogHandler` plus the new `ObserverLogHandler`:
+
+```swift
+import Logging
+import OpenAPILoggingMiddleware
+
+let logger = Logger(label: "my-app") { label in
+    MultiplexLogHandler([
+        PrefixedStreamLogHandler(label: label, logPrefix: "🖥️ "),
+        ObserverLogHandler(label: label) { event in
+            // Forward every log event anywhere you like:
+            MyDashboardBuffer.shared.push(event)
+        }
+    ])
+}
+
+let middleware = LoggingMiddleware(
+    logger: logger,
+    appName: "MyApp",
+    logPrefix: "🖥️ "
+)
+```
+
+You can also start from the built-in defaults and layer on top:
+
+```swift
+let base = LoggingMiddleware.defaultLogger(logPrefix: "🖥️ ")
+// wrap via MultiplexLogHandler if you need to add your own handler
 ```
 
 ## File Naming
@@ -175,11 +214,13 @@ log show --predicate 'subsystem == "com.openapi"' --last 1d --style json > logs.
 
 ## Architecture
 
-The middleware uses a `MultiplexLogHandler` to direct log output to multiple destinations simultaneously. By default, it's configured with:
+The middleware uses Apple's `Logging.MultiplexLogHandler` to direct log output to multiple destinations simultaneously. By default, it's configured with:
 
-- **`StreamLogHandler`**: Prints formatted logs to the console (stdout).
+- **`PrefixedStreamLogHandler`**: Prints formatted logs to the console (stdout). *(Renamed from `StreamLogHandler` in v1.2.0 to avoid collision with swift-log's own `StreamLogHandler`.)*
 - **`JSONFileLogHandler`**: Saves structured JSON logs to a file in the app's Documents directory.
 - **`OSLogHandler`**: Sends logs to Apple's unified logging system (macOS 11+, iOS 14+).
+
+As of v1.2.0 all four handlers (plus the new `ObserverLogHandler`) are `public`, so you can reuse them when composing your own `Logger`. See [Extensibility](#extensibility-v120) above.
 
 This architecture makes it easy to:
 - Monitor logs in real-time during development (console & OSLog)
