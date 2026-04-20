@@ -1,39 +1,42 @@
 import Foundation
 import Logging
 
-/// Thread safety provided by MultiplexLogHandler's serial queue synchronization
-final class StreamLogHandler: LogHandler {
+/// A `LogHandler` that writes formatted metadata lines to any `TextOutputStream`
+/// (stdout by default), prefixing each line with an optional string.
+///
+/// Renamed from `StreamLogHandler` in v1.2.0 to avoid collision with
+/// `Logging.StreamLogHandler.standardOutput` from swift-log.
+public final class PrefixedStreamLogHandler: LogHandler {
     private let label: String
     nonisolated(unsafe) private var _logLevel: Logger.Level = .info
-    nonisolated(unsafe) var stream: TextOutputStream
+    nonisolated(unsafe) public var stream: TextOutputStream
     private let logPrefix: String
 
-    init(label: String, stream: TextOutputStream = StandardOutputStream(), logPrefix: String = "") {
+    public init(label: String, stream: TextOutputStream = StandardOutputStream(), logPrefix: String = "") {
         self.label = label
         self.stream = stream
         self.logPrefix = logPrefix
     }
 
-    var logLevel: Logger.Level {
+    public var logLevel: Logger.Level {
         get { _logLevel }
         set { _logLevel = newValue }
     }
 
-    nonisolated(unsafe) var metadata: Logger.Metadata = [:]
+    nonisolated(unsafe) public var metadata: Logger.Metadata = [:]
 
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
+    public subscript(metadataKey key: String) -> Logger.Metadata.Value? {
         get { return metadata[key] }
         set { metadata[key] = newValue }
     }
 
-    // Implement the required log method from LogHandler
-    func log(level: Logger.Level,
-             message: Logger.Message,
-             metadata: Logger.Metadata?,
-             source: String,
-             file: String,
-             function: String,
-             line: UInt) {
+    public func log(level: Logger.Level,
+                    message: Logger.Message,
+                    metadata: Logger.Metadata?,
+                    source: String,
+                    file: String,
+                    function: String,
+                    line: UInt) {
 
         guard let metadata = metadata else { return }
 
@@ -63,9 +66,11 @@ final class StreamLogHandler: LogHandler {
     }
 }
 
-// Standard output stream
-struct StandardOutputStream: TextOutputStream, @unchecked Sendable {
-    func write(_ string: String) {
+/// Wraps Swift's `print(_:terminator:)` as a `TextOutputStream`. Default target
+/// for `PrefixedStreamLogHandler`.
+public struct StandardOutputStream: TextOutputStream, @unchecked Sendable {
+    public init() {}
+    public func write(_ string: String) {
         print(string, terminator: "")
     }
 }

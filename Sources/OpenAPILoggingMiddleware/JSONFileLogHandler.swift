@@ -1,8 +1,9 @@
 import Foundation
 import Logging
 
-/// Thread safety provided by MultiplexLogHandler's serial queue synchronization
-final class JSONFileLogHandler: LogHandler {
+/// A `LogHandler` that appends structured log entries to a JSON array on disk.
+/// The file is rewritten atomically on each log; suitable for low-volume use.
+public final class JSONFileLogHandler: LogHandler {
     let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
 
     private let label: String
@@ -12,7 +13,7 @@ final class JSONFileLogHandler: LogHandler {
     nonisolated(unsafe) private var _logLevel: Logger.Level = .info
     private let logPrefix: String
 
-    init(label: String, logFileURL: URL, logPrefix: String = "") {
+    public init(label: String, logFileURL: URL, logPrefix: String = "") {
         self.label = label
         self.logFileURL = logFileURL
         self.logFileName = logFileURL.lastPathComponent
@@ -34,28 +35,28 @@ final class JSONFileLogHandler: LogHandler {
         self.fileHandle.closeFile() // Ensure the file is closed when done
     }
 
-    // MARK: MetaDtata -
+    // MARK: Metadata -
 
     // Required for LogHandler protocol
-    subscript(metadataKey key: String) -> Logger.Metadata.Value? {
+    public subscript(metadataKey key: String) -> Logger.Metadata.Value? {
         get { return metadata[key] }
         set { metadata[key] = newValue }
     }
 
-    nonisolated(unsafe) var metadata: Logger.Metadata = [:]
+    nonisolated(unsafe) public var metadata: Logger.Metadata = [:]
 
-    var logLevel: Logger.Level {
+    public var logLevel: Logger.Level {
         get { self._logLevel }
         set { self._logLevel = newValue }
     }
 
-    func log(level: Logger.Level,
-             message: Logger.Message,
-             metadata: Logger.Metadata?,
-             source: String,
-             file: String,
-             function: String,
-             line: UInt) {
+    public func log(level: Logger.Level,
+                    message: Logger.Message,
+                    metadata: Logger.Metadata?,
+                    source: String,
+                    file: String,
+                    function: String,
+                    line: UInt) {
 
         guard let metadata = metadata else { return }
 

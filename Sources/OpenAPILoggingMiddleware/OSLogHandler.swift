@@ -4,15 +4,16 @@ import Logging
 #if canImport(OSLog)
 import OSLog
 
-/// Thread safety provided by MultiplexLogHandler's serial queue synchronization
+/// A `LogHandler` that forwards metadata-rich log events to Apple's unified
+/// logging system (`os.Logger`). Available on Apple platforms.
 @available(macOS 11.0, iOS 14.0, watchOS 7.0, tvOS 14.0, *)
-final class OSLogHandler: LogHandler {
+public final class OSLogHandler: LogHandler {
     private let osLogger: os.Logger
     private let label: String
     nonisolated(unsafe) private var _logLevel: Logging.Logger.Level = .info
     private let logPrefix: String
 
-    init(subsystem: String, category: String, logPrefix: String = "") {
+    public init(subsystem: String, category: String, logPrefix: String = "") {
         self.osLogger = os.Logger(subsystem: subsystem, category: category)
         self.label = category
         self.logPrefix = logPrefix
@@ -20,25 +21,25 @@ final class OSLogHandler: LogHandler {
 
     // MARK: LogHandler Protocol
 
-    var logLevel: Logging.Logger.Level {
+    public var logLevel: Logging.Logger.Level {
         get { _logLevel }
         set { _logLevel = newValue }
     }
 
-    nonisolated(unsafe) var metadata: Logging.Logger.Metadata = [:]
+    nonisolated(unsafe) public var metadata: Logging.Logger.Metadata = [:]
 
-    subscript(metadataKey key: String) -> Logging.Logger.Metadata.Value? {
+    public subscript(metadataKey key: String) -> Logging.Logger.Metadata.Value? {
         get { return metadata[key] }
         set { metadata[key] = newValue }
     }
 
-    func log(level: Logging.Logger.Level,
-             message: Logging.Logger.Message,
-             metadata: Logging.Logger.Metadata?,
-             source: String,
-             file: String,
-             function: String,
-             line: UInt) {
+    public func log(level: Logging.Logger.Level,
+                    message: Logging.Logger.Message,
+                    metadata: Logging.Logger.Metadata?,
+                    source: String,
+                    file: String,
+                    function: String,
+                    line: UInt) {
 
         guard let metadata = metadata else { return }
 

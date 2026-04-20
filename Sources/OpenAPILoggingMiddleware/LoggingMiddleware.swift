@@ -11,6 +11,9 @@ public actor LoggingMiddleware {
     public let bodyLoggingPolicy: BodyLoggingPolicy
     public let logPrefix: String
     public let appName: String?
+    public let requestLogLevel: Logger.Level
+    public let responseLogLevel: Logger.Level
+    public let errorLogLevel: Logger.Level
     private let logFileName: String
     private let jsonLogFileName: String
 
@@ -19,9 +22,15 @@ public actor LoggingMiddleware {
     public init(logger: Logger? = nil,
                 bodyLoggingConfiguration: BodyLoggingPolicy = .upTo(maxBytes: 1024 * 1024 * 2),
                 appName: String? = nil,
-                logPrefix: String = "") {
+                logPrefix: String = "",
+                requestLogLevel: Logger.Level = .debug,
+                responseLogLevel: Logger.Level = .debug,
+                errorLogLevel: Logger.Level = .error) {
         self.logPrefix = logPrefix
         self.appName = appName
+        self.requestLogLevel = requestLogLevel
+        self.responseLogLevel = responseLogLevel
+        self.errorLogLevel = errorLogLevel
 
         // Generate file names based on appName and logPrefix
         let cleanAppName = appName?
@@ -63,8 +72,8 @@ public actor LoggingMiddleware {
 
     // MARK: File Handling -
 
-    private static func createStreamLogHandler(label: String, logPrefix: String) -> StreamLogHandler {
-        return StreamLogHandler(label: label, logPrefix: logPrefix)
+    private static func createStreamLogHandler(label: String, logPrefix: String) -> PrefixedStreamLogHandler {
+        return PrefixedStreamLogHandler(label: label, logPrefix: logPrefix)
     }
 
     private static func createJSONFileLogHandler(label: String, logPrefix: String, jsonLogFileName: String) -> JSONFileLogHandler {
@@ -82,12 +91,15 @@ public actor LoggingMiddleware {
 
     // MARK: Default Logger -
 
-    private static func defaultLogger(logPrefix: String, jsonLogFileName: String) -> Logger {
+    /// Build the default Logger used when no `logger` is passed to `init`.
+    /// Exposed as public so consumers can start from the built-in handler set
+    /// and layer their own handlers on top via `Logging.MultiplexLogHandler`.
+    public static func defaultLogger(logPrefix: String = "", jsonLogFileName: String = "OpenAPILog.json") -> Logger {
         let label = "com.openapi.logger"
 
         // Set up the logger with a multiplex log handler that includes stream, file, and OSLog handlers
         var logger = Logger(label: label, factory: { _ in
-            var handlers: [LogHandler] = [
+            var handlers: [any LogHandler] = [
                 createStreamLogHandler(label: label, logPrefix: logPrefix),
                 createJSONFileLogHandler(label: label, logPrefix: logPrefix, jsonLogFileName: jsonLogFileName)
             ]
@@ -98,7 +110,7 @@ public actor LoggingMiddleware {
             }
             #endif
 
-            return MultiplexLogHandler(handlers: handlers)
+            return MultiplexLogHandler(handlers)
         })
         logger.logLevel = .debug // Set the desired log level
         return logger
@@ -183,7 +195,7 @@ extension LoggingMiddleware {
 
         // Ensure unique keys in metadata
         metadata[LogMetadataKey.uniqueKey.rawValue] = .stringConvertible(UUID().uuidString) // Example for a unique key
-        logger.debug("Request", metadata: metadata)
+        logger.log(level: requestLogLevel, "Request", metadata: metadata)
     }
 
     func log(_ request: HTTPRequest,
@@ -212,7 +224,7 @@ extension LoggingMiddleware {
 
         // Ensure unique keys in metadata
         metadata[LogMetadataKey.uniqueKey.rawValue] = .stringConvertible(UUID().uuidString) // Example for a unique key
-        logger.debug("Response", metadata: metadata)
+        logger.log(level: responseLogLevel, "Response", metadata: metadata)
     }
 
     func log(_ request: HTTPRequest, failedWith error: any Error, operationID: String) {
@@ -225,6 +237,6 @@ extension LoggingMiddleware {
         ]
         // Ensure unique keys in metadata
         metadata[LogMetadataKey.uniqueKey.rawValue] = .stringConvertible(UUID().uuidString) // Example for a unique key
-        logger.debug("Request error", metadata: metadata)
+        logger.log(level: errorLogLevel, "Request error", metadata: metadata)
     }
 }

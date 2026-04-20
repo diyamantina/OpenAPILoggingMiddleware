@@ -3,8 +3,8 @@ import Foundation
 import Logging
 @testable import OpenAPILoggingMiddleware
 
-@Suite("StreamLogHandler")
-struct StreamLogHandlerTests {
+@Suite("PrefixedStreamLogHandler")
+struct PrefixedStreamLogHandlerTests {
 
     // MARK: - StandardOutputStream
 
@@ -24,10 +24,10 @@ struct StreamLogHandlerTests {
         }
     }
 
-    @Test("StreamLogHandler writes metadata to stream")
+    @Test("PrefixedStreamLogHandler writes metadata to stream")
     func streamLogHandlerWritesMetadata() {
         let capture = CapturedOutputStream()
-        var handler = StreamLogHandler(label: "test", stream: capture, logPrefix: "[PREFIX]")
+        var handler = PrefixedStreamLogHandler(label: "test", stream: capture, logPrefix: "[PREFIX]")
         handler.log(
             level: .info,
             message: "test message",
@@ -42,10 +42,10 @@ struct StreamLogHandlerTests {
         #expect(capture.captured.contains("[PREFIX]"))
     }
 
-    @Test("StreamLogHandler skips logging when metadata is nil")
+    @Test("PrefixedStreamLogHandler skips logging when metadata is nil")
     func streamLogHandlerSkipsNilMetadata() {
         let capture = CapturedOutputStream()
-        var handler = StreamLogHandler(label: "test", stream: capture)
+        var handler = PrefixedStreamLogHandler(label: "test", stream: capture)
         handler.log(
             level: .info,
             message: "test",
@@ -58,18 +58,18 @@ struct StreamLogHandlerTests {
         #expect(capture.captured.isEmpty)
     }
 
-    @Test("StreamLogHandler log level get/set")
+    @Test("PrefixedStreamLogHandler log level get/set")
     func streamLogHandlerLogLevel() {
-        var handler = StreamLogHandler(label: "test")
+        var handler = PrefixedStreamLogHandler(label: "test")
         handler.logLevel = .debug
         #expect(handler.logLevel == .debug)
         handler.logLevel = .error
         #expect(handler.logLevel == .error)
     }
 
-    @Test("StreamLogHandler metadata get/set")
+    @Test("PrefixedStreamLogHandler metadata get/set")
     func streamLogHandlerMetadata() {
-        var handler = StreamLogHandler(label: "test")
+        var handler = PrefixedStreamLogHandler(label: "test")
         handler[metadataKey: "foo"] = "bar"
         #expect(handler[metadataKey: "foo"] == "bar")
         #expect(handler[metadataKey: "missing"] == nil)
