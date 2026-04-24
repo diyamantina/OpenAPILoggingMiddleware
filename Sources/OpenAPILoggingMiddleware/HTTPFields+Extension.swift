@@ -24,12 +24,18 @@ public extension HTTPFields {
         return result.joined(separator: ", ")
     }
 
+    /// Converts HTTPFields to a `[String: String]`. When the same header name
+    /// appears more than once (which HTTP allows — `Cookie`, `Set-Cookie`,
+    /// `Via`, `Vary`, etc.), the **last** value wins. This is a logging
+    /// helper; losing precision on duplicate values in the log output is an
+    /// intentional trade-off for not trapping the host process.
+    ///
+    /// Previously used `Dictionary(uniqueKeysWithValues:)` which traps on any
+    /// duplicate key, so a request with two `Cookie` headers would abort the
+    /// server before it could reach the actual handler.
     func toDictionary() -> [String: String] {
-        let dict = self.map {
-            ($0.name.rawName, $0.value.description)
-        }
-        let result = Dictionary(uniqueKeysWithValues: dict)
-        return result
+        let pairs = self.map { ($0.name.rawName, $0.value.description) }
+        return Dictionary(pairs, uniquingKeysWith: { _, last in last })
     }
 
     func toJSONString() -> String? {
