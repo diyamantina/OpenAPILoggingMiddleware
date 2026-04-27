@@ -12,6 +12,7 @@ import OpenAPIRuntime
 struct IntegrationTests {
 
     final class EventSink: @unchecked Sendable {
+        let lock = NSLock()
         var events: [ObserverLogHandler.Event] = []
         func append(_ event: ObserverLogHandler.Event) { events.append(event) }
     }
@@ -172,6 +173,83 @@ struct IntegrationTests {
         #expect(requestEvent?.level == .info)
         #expect(responseEvent?.level == .notice)
         #expect(errorEvent?.level == .critical)
+    }
+
+    /// End-to-end reproduction of the production scenario that crashed
+    /// `apiserverapp` on macOS (`SIGABRT` from libmalloc): many concurrent
+    /// `LoggingMiddleware.intercept(...)` calls flowing through one shared
+    /// `ObserverLogHandler` that lives behind a `MultiplexLogHandler`. This
+    /// is the path Vapor + the OpenAPI runtime exercise per request.
+    ///
+    /// Without the `OSAllocatedUnfairLock` fix on `ObserverLogHandler`, the
+    /// concurrent metadata reads + writes inside `log(...)` corrupt the
+    /// dictionary's storage and abort the process. With the fix, this test
+    /// must complete cleanly and the observer must receive 2 events per
+    /// successful request (one Request, one Response).
+    @Test("Concurrent middleware intercepts share one observer without crashing")
+    func concurrentInterceptsAcrossSharedObserver() async throws {
+        let sink = EventSink()
+        // One observer instance, captured by reference and reused in every
+        // Logger created below. This mirrors `LoggingSystem.bootstrap`'s
+        // factory caching where the same handler is shared across loggers
+        // with the same label.
+        let observer = ObserverLogHandler(label: "concurrent") { event in
+            // Sink itself needs synchronisation; the handler doesn't, post-fix.
+            sink.lock.withLock { sink.events.append(event) }
+        }
+
+        // Build a Logger that wraps the SHARED observer. Every middleware
+        // instance below points at this same Logger value, which in turn
+        // forwards into the same `observer` instance.
+        var logger = Logger(label: "concurrent") { _ in
+            MultiplexLogHandler([observer])
+        }
+        logger.logLevel = .debug
+
+        let middleware = LoggingMiddleware(
+            logger: logger,
+            bodyLoggingConfiguration: .never,
+            appName: "stress",
+            logPrefix: "[s] "
+        )
+
+        let taskCount = 32
+        let requestsPerTask = 50
+
+        await withTaskGroup(of: Void.self) { group in
+            for taskID in 0 ..< taskCount {
+                group.addTask {
+                    for op in 0 ..< requestsPerTask {
+                        let req = HTTPRequest(
+                            method: .get,
+                            scheme: "https",
+                            authority: "stress.test",
+                            path: "/op/\(taskID)/\(op)"
+                        )
+                        do {
+                            _ = try await middleware.intercept(
+                                req,
+                                body: nil,
+                                metadata: ServerRequestMetadata(pathParameters: [:]),
+                                operationID: "op-\(taskID)-\(op)",
+                                next: { _, _, _ in (HTTPResponse(status: .ok), nil) }
+                            )
+                        } catch {
+                            // Failures are surfaced via the assertion below.
+                        }
+                    }
+                }
+            }
+        }
+
+        // The `ServerMiddleware.intercept` happy path emits exactly two
+        // events (Request + Response). If the unprotected dictionary races
+        // we never reach this line — the process is already dead.
+        let expected = taskCount * requestsPerTask * 2
+        #expect(
+            sink.lock.withLock { sink.events.count } == expected,
+            "Expected \(expected) events from \(taskCount) × \(requestsPerTask) requests"
+        )
     }
 
     @Test("Renamed PrefixedStreamLogHandler writes prefix to stream")
