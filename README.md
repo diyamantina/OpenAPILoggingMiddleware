@@ -15,6 +15,7 @@ A flexible, configurable logging middleware for OpenAPI client and server implem
 - ✅ **Automatic File Naming**: Generates clean filenames from app name and prefix
 - ✅ **Pluggable Handlers** *(v1.2.0)*: Ship log events to any sink via `ObserverLogHandler`
 - ✅ **Per-Event Log Levels** *(v1.2.0)*: Configure `requestLogLevel`, `responseLogLevel`, `errorLogLevel` independently
+- ✅ **Thread-safe `ObserverLogHandler`** *(v1.2.2)*: All mutable state guarded by `OSAllocatedUnfairLock` — required when the handler is shared across concurrent OpenAPI calls (e.g. behind `LoggingSystem.bootstrap`)
 
 ## Usage
 
@@ -301,6 +302,18 @@ try handler.registerHandlers(
 ## Thread Safety
 
 The `LoggingMiddleware` is an `actor`, ensuring thread-safe operation across concurrent requests.
+
+`ObserverLogHandler` is also safe to share across threads as of **v1.2.2**: its
+metadata and log-level storage are guarded by an `OSAllocatedUnfairLock<State>`.
+This matters when the handler is wired into `LoggingSystem.bootstrap` (so that
+multiple `Logger`s with the same label fan into the same handler instance) and
+the host serves concurrent OpenAPI traffic. Earlier versions used a
+`nonisolated(unsafe)` `Dictionary` which, under load, raced its copy-on-write
+buffer and crashed the host process with `SIGABRT` from libmalloc's
+"pointer being freed was not allocated" guard. **Upgrade to ≥ 1.2.2** if you
+ever expose the same observer to more than one thread of execution. See
+[`docs/incidents/2026-04-27-observerloghandler-thread-safety.md`](docs/incidents/2026-04-27-observerloghandler-thread-safety.md)
+for the full incident write-up.
 
 ## Dependencies
 
