@@ -68,6 +68,116 @@ struct IntegrationTests {
         #expect(responseEvent?.metadata["statusCode"] == "200")
     }
 
+    // MARK: - Header redaction
+
+    @Test("Authorization is redacted in request log metadata by default")
+    func authorizationIsRedactedByDefault() async throws {
+        let sink = EventSink()
+        let observer = ObserverLogHandler(label: "t") { sink.append($0) }
+        let middleware = LoggingMiddleware(
+            logger: makeLogger(observer: observer),
+            bodyLoggingConfiguration: .never
+        )
+
+        var request = HTTPRequest(method: .get, scheme: "https", authority: "x.test", path: "/p")
+        request.headerFields[.authorization] = "Bearer eyJleak"
+        request.headerFields[.cookie] = "session=secret"
+        let metadata = ServerRequestMetadata(pathParameters: [:])
+
+        _ = try await middleware.intercept(
+            request, body: nil, metadata: metadata, operationID: "op",
+            next: { _, _, _ in (HTTPResponse(status: .ok), nil) }
+        )
+
+        let requestEvent = sink.events.first { $0.message == "Request" }
+        let headersJSON = requestEvent?.metadata["requestHeadersJSON"] ?? ""
+        #expect(headersJSON.contains("\"Authorization\""))
+        #expect(headersJSON.contains("<redacted>"))
+        #expect(!headersJSON.contains("eyJleak"))
+        #expect(!headersJSON.contains("session=secret"))
+    }
+
+    @Test("Custom redaction set: empty disables redaction")
+    func customEmptyRedactionDoesNotRedact() async throws {
+        let sink = EventSink()
+        let observer = ObserverLogHandler(label: "t") { sink.append($0) }
+        let middleware = LoggingMiddleware(
+            logger: makeLogger(observer: observer),
+            bodyLoggingConfiguration: .never,
+            redactedHeaderFields: []
+        )
+
+        var request = HTTPRequest(method: .get, scheme: "https", authority: "x.test", path: "/p")
+        request.headerFields[.authorization] = "Bearer not-redacted"
+        let metadata = ServerRequestMetadata(pathParameters: [:])
+
+        _ = try await middleware.intercept(
+            request, body: nil, metadata: metadata, operationID: "op",
+            next: { _, _, _ in (HTTPResponse(status: .ok), nil) }
+        )
+
+        let requestEvent = sink.events.first { $0.message == "Request" }
+        let headersJSON = requestEvent?.metadata["requestHeadersJSON"] ?? ""
+        #expect(headersJSON.contains("Bearer not-redacted"))
+    }
+
+    @Test("Custom redaction set: extending the default redacts an extra header")
+    func customExtendedRedaction() async throws {
+        let sink = EventSink()
+        let observer = ObserverLogHandler(label: "t") { sink.append($0) }
+        let middleware = LoggingMiddleware(
+            logger: makeLogger(observer: observer),
+            bodyLoggingConfiguration: .never,
+            redactedHeaderFields: LoggingMiddleware.defaultRedactedHeaderFields
+                .union([HTTPField.Name("X-Api-Key")!])
+        )
+
+        var request = HTTPRequest(method: .get, scheme: "https", authority: "x.test", path: "/p")
+        request.headerFields[HTTPField.Name("X-Api-Key")!] = "abc123"
+        let metadata = ServerRequestMetadata(pathParameters: [:])
+
+        _ = try await middleware.intercept(
+            request, body: nil, metadata: metadata, operationID: "op",
+            next: { _, _, _ in (HTTPResponse(status: .ok), nil) }
+        )
+
+        let requestEvent = sink.events.first { $0.message == "Request" }
+        let headersJSON = requestEvent?.metadata["requestHeadersJSON"] ?? ""
+        #expect(headersJSON.contains("<redacted>"))
+        #expect(!headersJSON.contains("abc123"))
+    }
+
+    @Test("Response log emits response headers (not request headers) with redaction applied")
+    func responseLogUsesResponseHeadersAndRedacts() async throws {
+        let sink = EventSink()
+        let observer = ObserverLogHandler(label: "t") { sink.append($0) }
+        let middleware = LoggingMiddleware(
+            logger: makeLogger(observer: observer),
+            bodyLoggingConfiguration: .never
+        )
+
+        let request = HTTPRequest(method: .get, scheme: "https", authority: "x.test", path: "/p")
+        let metadata = ServerRequestMetadata(pathParameters: [:])
+
+        let response: HTTPResponse = {
+            var r = HTTPResponse(status: .ok)
+            r.headerFields[.setCookie] = "sid=secret"
+            r.headerFields[.contentType] = "application/json"
+            return r
+        }()
+
+        _ = try await middleware.intercept(
+            request, body: nil, metadata: metadata, operationID: "op",
+            next: { _, _, _ in (response, nil) }
+        )
+
+        let responseEvent = sink.events.first { $0.message == "Response" }
+        let headersJSON = responseEvent?.metadata["responseHeadersJSON"] ?? ""
+        #expect(headersJSON.contains("Content-Type"))
+        #expect(headersJSON.contains("<redacted>"))
+        #expect(!headersJSON.contains("sid=secret"))
+    }
+
     @Test("Error path: middleware emits an error event and rethrows")
     func serverInterceptErrorEvent() async {
         let sink = EventSink()

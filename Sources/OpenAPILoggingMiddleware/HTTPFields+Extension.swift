@@ -57,4 +57,27 @@ public extension HTTPFields {
         let dictionary = self.toDictionary()
         return String.convertDictionaryToJSONString(dictionary)
     }
+
+    /// Returns a copy of the fields with sensitive values replaced by
+    /// `"<redacted>"`.
+    ///
+    /// Comparison is case-insensitive (per HTTP semantics). Repeated headers
+    /// with a redacted name collapse to a single `<redacted>` entry. Use this
+    /// before forwarding headers to a `LogHandler` so that
+    /// `Authorization`, `Cookie`, `Set-Cookie`, etc. never reach log files
+    /// or downstream observers.
+    ///
+    /// - Parameter redactedFields: The header names whose values should be
+    ///   replaced. Default empty (no redaction).
+    /// - Returns: A new `HTTPFields` with the requested values redacted.
+    func redacted(redacting redactedFields: Set<HTTPField.Name>) -> HTTPFields {
+        guard !redactedFields.isEmpty else { return self }
+        var copy = self
+        for name in redactedFields {
+            if copy.contains(name) {
+                copy[name] = "<redacted>"
+            }
+        }
+        return copy
+    }
 }

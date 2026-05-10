@@ -31,6 +31,59 @@ struct HTTPFieldsExtensionTests {
         #expect(dict["Content-Type"] == "application/json")
     }
 
+    // MARK: - redacted(redacting:)
+
+    @Test("redacted replaces Authorization value with <redacted>")
+    func redactedAuthorization() {
+        var fields = HTTPFields()
+        fields.append(HTTPField(name: .authorization, value: "Bearer eyJleak"))
+        fields.append(HTTPField(name: .contentType, value: "application/json"))
+        let redacted = fields.redacted(redacting: [.authorization])
+        let dict = redacted.toDictionary()
+        #expect(dict["Authorization"] == "<redacted>")
+        #expect(dict["Content-Type"] == "application/json")
+    }
+
+    @Test("redacted with empty set is identity")
+    func redactedEmptySetIsIdentity() {
+        var fields = HTTPFields()
+        fields.append(HTTPField(name: .authorization, value: "Bearer secret"))
+        let redacted = fields.redacted(redacting: [])
+        #expect(redacted.toDictionary()["Authorization"] == "Bearer secret")
+    }
+
+    @Test("redacted leaves untargeted fields alone")
+    func redactedDoesNotTouchOthers() {
+        var fields = HTTPFields()
+        fields.append(HTTPField(name: .authorization, value: "Bearer secret"))
+        fields.append(HTTPField(name: .userAgent, value: "test/1.0"))
+        let redacted = fields.redacted(redacting: [.authorization])
+        let dict = redacted.toDictionary()
+        #expect(dict["Authorization"] == "<redacted>")
+        #expect(dict["User-Agent"] == "test/1.0")
+    }
+
+    @Test("redacted handles missing field gracefully (no-op)")
+    func redactedMissingFieldNoOp() {
+        var fields = HTTPFields()
+        fields.append(HTTPField(name: .contentType, value: "application/json"))
+        let redacted = fields.redacted(redacting: [.authorization, .cookie])
+        let dict = redacted.toDictionary()
+        #expect(dict["Authorization"] == nil)
+        #expect(dict["Cookie"] == nil)
+        #expect(dict["Content-Type"] == "application/json")
+    }
+
+    @Test("redacted collapses repeated headers to a single <redacted> entry")
+    func redactedCollapsesRepeated() {
+        var fields = HTTPFields()
+        fields.append(HTTPField(name: .setCookie, value: "session=a"))
+        fields.append(HTTPField(name: .setCookie, value: "csrf=b"))
+        let redacted = fields.redacted(redacting: [.setCookie])
+        let dict = redacted.toDictionary()
+        #expect(dict["Set-Cookie"] == "<redacted>")
+    }
+
     // MARK: - Regression: duplicate header names
 
     /// Regression for the crash that aborted every host process logging a

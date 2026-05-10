@@ -1,9 +1,5 @@
 import Foundation
 import Logging
-// Submodule import: pulls in `OSAllocatedUnfairLock` only and avoids clashing
-// with `os.Logger` (Apple's unified logging) which would shadow swift-log's
-// `Logging.Logger` if the whole `os` module were imported.
-import struct os.OSAllocatedUnfairLock
 
 /// A generic `LogHandler` that forwards every log event to a user-supplied
 /// closure. Meant for piping log activity into arbitrary sinks (an admin
@@ -62,26 +58,26 @@ public final class ObserverLogHandler: LogHandler {
     private let label: String
     private let observe: @Sendable (Event) -> Void
 
-    /// State protected by an `OSAllocatedUnfairLock`. swift-log's `LogHandler`
-    /// API is sync and called from any thread — Vapor request handlers and the
-    /// OpenAPI runtime hammer the same handler instance from many threads at
-    /// once. The previous `nonisolated(unsafe) var metadata: Dictionary` was a
-    /// race on a non-thread-safe container; concurrent writes corrupted the
-    /// heap and crashed the host process with `SIGABRT` from libmalloc's
-    /// "pointer being freed was not allocated" guard.
+    /// State protected by ``StateLock``. swift-log's `LogHandler` API is sync
+    /// and called from any thread — Vapor request handlers and the OpenAPI
+    /// runtime hammer the same handler instance from many threads at once. A
+    /// `nonisolated(unsafe) var metadata: Dictionary` would be a race on a
+    /// non-thread-safe container; concurrent writes corrupt the heap and
+    /// crash the host process with `SIGABRT` from libmalloc's "pointer being
+    /// freed was not allocated" guard.
     ///
-    /// `OSAllocatedUnfairLock<State>` is Apple's recommended primitive for
-    /// this shape on macOS 13+/iOS 16+ (this package's deployment targets).
-    /// It owns the state, so callers can't forget to lock — every access goes
-    /// through `withLock { … }`. The `os_unfair_lock` underneath is a plain
-    /// non-recursive mutex, so we never hold it across an `await` (the
+    /// `StateLock<State>` is a non-recursive mutex that owns the state, so
+    /// callers can't forget to lock — every access goes through
+    /// `withLock { ... }`. On Apple platforms it aliases to
+    /// `os.OSAllocatedUnfairLock`; on Linux it's an `NSLock`-backed class
+    /// with the same surface. We never hold it across an `await` (the
     /// protocol API is sync; `log(...)` snapshots state under the lock and
     /// drops it before invoking the user's observer closure).
-    private struct State {
+    private struct State: Sendable {
         var logLevel: Logger.Level = .info
         var metadata: Logger.Metadata = [:]
     }
-    private let state = OSAllocatedUnfairLock<State>(initialState: State())
+    private let state = StateLock<State>(initialState: State())
 
     public init(label: String, observe: @escaping @Sendable (Event) -> Void) {
         self.label = label

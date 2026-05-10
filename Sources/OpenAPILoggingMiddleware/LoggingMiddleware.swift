@@ -44,7 +44,7 @@ import Logging
 /// ## Topics
 ///
 /// ### Creating the middleware
-/// - ``init(logger:bodyLoggingConfiguration:appName:logPrefix:requestLogLevel:responseLogLevel:errorLogLevel:)``
+/// - ``init(logger:bodyLoggingConfiguration:appName:logPrefix:requestLogLevel:responseLogLevel:errorLogLevel:redactedHeaderFields:)``
 ///
 /// ### Inspecting configuration
 /// - ``bodyLoggingPolicy``
@@ -88,8 +88,30 @@ public actor LoggingMiddleware {
 
     /// Log level used when the next responder throws. Defaults to `.error`.
     public let errorLogLevel: Logger.Level
+
+    /// Header names whose values are replaced by `"<redacted>"` before being
+    /// rendered into log metadata. See ``defaultRedactedHeaderFields``.
+    public let redactedHeaderFields: Set<HTTPField.Name>
+
     private let logFileName: String
     private let jsonLogFileName: String
+
+    /// Conservative default for ``redactedHeaderFields``. Covers the common
+    /// authentication and session-cookie header names so a permissive
+    /// `BodyLoggingPolicy` (or a downstream `LogHandler` that reads the
+    /// `requestHeadersJSON` / `responseHeadersJSON` metadata keys) cannot
+    /// surface bearer tokens or session cookies to log files.
+    ///
+    /// - `Authorization`
+    /// - `Proxy-Authorization`
+    /// - `Cookie`
+    /// - `Set-Cookie`
+    public static let defaultRedactedHeaderFields: Set<HTTPField.Name> = [
+        .authorization,
+        .proxyAuthorization,
+        .cookie,
+        .setCookie,
+    ]
 
     // MARK: init -
 
@@ -123,18 +145,26 @@ public actor LoggingMiddleware {
     ///     `.debug`.
     ///   - errorLogLevel: Log level used when the next responder throws.
     ///     Default `.error`.
+    ///   - redactedHeaderFields: Header names whose values are replaced by
+    ///     `"<redacted>"` before being written to log metadata. Defaults to
+    ///     ``defaultRedactedHeaderFields`` (Authorization, Proxy-Authorization,
+    ///     Cookie, Set-Cookie). Pass `[]` to disable redaction (not
+    ///     recommended for production), or extend the default set with
+    ///     additional names you treat as sensitive.
     public init(logger: Logger? = nil,
                 bodyLoggingConfiguration: BodyLoggingPolicy = .upTo(maxBytes: 1024 * 1024 * 2),
                 appName: String? = nil,
                 logPrefix: String = "",
                 requestLogLevel: Logger.Level = .debug,
                 responseLogLevel: Logger.Level = .debug,
-                errorLogLevel: Logger.Level = .error) {
+                errorLogLevel: Logger.Level = .error,
+                redactedHeaderFields: Set<HTTPField.Name> = LoggingMiddleware.defaultRedactedHeaderFields) {
         self.logPrefix = logPrefix
         self.appName = appName
         self.requestLogLevel = requestLogLevel
         self.responseLogLevel = responseLogLevel
         self.errorLogLevel = errorLogLevel
+        self.redactedHeaderFields = redactedHeaderFields
 
         // Generate file names based on appName and logPrefix
         let cleanAppName = appName?
@@ -181,8 +211,14 @@ public actor LoggingMiddleware {
     }
 
     private static func createJSONFileLogHandler(label: String, logPrefix: String, jsonLogFileName: String) -> JSONFileLogHandler {
-        let docPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-        let logFileURL = docPath.appendingPathComponent(jsonLogFileName)
+        // `temporaryDirectory` works on every platform Foundation supports
+        // (macOS, iOS, Linux). On macOS it lands under `/var/folders/.../T/`,
+        // on Linux under `/tmp`. Consumers who want a different location can
+        // build a `JSONFileLogHandler` directly with their own URL and pass
+        // a custom `logger:` into ``LoggingMiddleware``.
+        let logFileURL = FileManager.default
+            .temporaryDirectory
+            .appendingPathComponent(jsonLogFileName)
         return JSONFileLogHandler(label: label, logFileURL: logFileURL, logPrefix: logPrefix)
     }
 
@@ -196,21 +232,23 @@ public actor LoggingMiddleware {
     // MARK: Default Logger -
 
     /// Build the default `Logger` used when no `logger` is passed to the
-    /// designated initialiser ``LoggingMiddleware/init(logger:bodyLoggingConfiguration:appName:logPrefix:requestLogLevel:responseLogLevel:errorLogLevel:)``.
+    /// designated initialiser ``LoggingMiddleware/init(logger:bodyLoggingConfiguration:appName:logPrefix:requestLogLevel:responseLogLevel:errorLogLevel:redactedHeaderFields:)``.
     ///
     /// Exposed as public so consumers can start from the built-in handler
     /// set and layer their own handlers on top via
     /// `Logging.MultiplexLogHandler`. The default set is:
-    /// - ``PrefixedStreamLogHandler`` (stdout)
-    /// - ``JSONFileLogHandler`` (file in the user's documents directory)
-    /// - ``OSLogHandler`` (Apple platforms only)
+    /// - ``PrefixedStreamLogHandler`` (stdout, every platform)
+    /// - ``JSONFileLogHandler`` (file under
+    ///   `FileManager.default.temporaryDirectory`, every platform)
+    /// - ``OSLogHandler`` (Apple platforms only — guarded by
+    ///   `#if canImport(OSLog)` so Linux builds skip it)
     ///
     /// - Parameters:
     ///   - logPrefix: String prepended to each line written by the bundled
     ///     handlers.
     ///   - jsonLogFileName: File name used by the JSON handler. The file
-    ///     lands in the system documents directory.
-    /// - Returns: A `Logger` ready to pass to ``init(logger:bodyLoggingConfiguration:appName:logPrefix:requestLogLevel:responseLogLevel:errorLogLevel:)``.
+    ///     lands under `FileManager.default.temporaryDirectory`.
+    /// - Returns: A `Logger` ready to pass to ``init(logger:bodyLoggingConfiguration:appName:logPrefix:requestLogLevel:responseLogLevel:errorLogLevel:redactedHeaderFields:)``.
     public static func defaultLogger(logPrefix: String = "", jsonLogFileName: String = "OpenAPILog.json") -> Logger {
         let label = "com.openapi.logger"
 
@@ -298,7 +336,9 @@ extension LoggingMiddleware {
              _ operationID: String,
              _ baseURL: URL? = nil) {
         let fullURL = baseURL?.appendingPathComponent(request.path ?? "")
-        let headersString = request.headerFields.toJSONString() ?? ""
+        let headersString = request.headerFields
+            .redacted(redacting: redactedHeaderFields)
+            .toJSONString() ?? ""
 
         var metadata: Logger.Metadata = [
             LogMetadataKey.method.rawValue: .stringConvertible(request.method),
@@ -323,7 +363,9 @@ extension LoggingMiddleware {
              _ statusReason: String,
              _ baseURL: URL? = nil) {
         let fullURL = baseURL?.appendingPathComponent(request.path ?? "")
-        let headersString = request.headerFields.toJSONString() ?? ""
+        let headersString = response.headerFields
+            .redacted(redacting: redactedHeaderFields)
+            .toJSONString() ?? ""
 
         // Cache the response JSON for potential decoding errors
 
