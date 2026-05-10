@@ -222,7 +222,7 @@ public actor LoggingMiddleware {
         return JSONFileLogHandler(label: label, logFileURL: logFileURL, logPrefix: logPrefix)
     }
 
-    #if canImport(OSLog)
+    #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
     @available(macOS 11.0, iOS 14.0, watchOS 7.0, tvOS 14.0, *)
     private static func createOSLogHandler(subsystem: String, category: String, logPrefix: String) -> OSLogHandler {
         return OSLogHandler(subsystem: subsystem, category: category, logPrefix: logPrefix)
@@ -259,7 +259,7 @@ public actor LoggingMiddleware {
                 createJSONFileLogHandler(label: label, logPrefix: logPrefix, jsonLogFileName: jsonLogFileName)
             ]
 
-            #if canImport(OSLog)
+            #if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
             if #available(macOS 11.0, iOS 14.0, watchOS 7.0, tvOS 14.0, *) {
                 handlers.append(createOSLogHandler(subsystem: "com.openapi", category: "logging-middleware", logPrefix: logPrefix))
             }

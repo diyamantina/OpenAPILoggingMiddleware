@@ -4,9 +4,17 @@ import PackageDescription
 
 let package = Package(
     name: "OpenAPILoggingMiddleware",
+    // Supported platforms (CI verifies all of them):
+    //   - macOS 13+    (full swift build + test)
+    //   - iOS 16+      (xcodebuild build verification)
+    //   - tvOS 16+     (xcodebuild build verification)
+    //   - watchOS 9+   (xcodebuild build verification)
+    //   - Linux        (Swift 6.0 container, full swift build + test)
     platforms: [
         .macOS(.v13),
-        .iOS(.v16)
+        .iOS(.v16),
+        .tvOS(.v16),
+        .watchOS(.v9)
     ],
     products: [
         .library(

@@ -6,6 +6,19 @@ on:
   pull_request:
     branches: [main]
 
+# Five-platform CI matrix:
+#   - Linux   (Swift 6.0 container)             — full swift build + test
+#   - macOS   (latest)                          — full swift build + test
+#   - iOS     (Simulator, xcodebuild build)     — compile verification
+#   - tvOS    (Simulator, xcodebuild build)     — compile verification
+#   - watchOS (Simulator, xcodebuild build)     — compile verification
+#
+# SPM tests do not run on iOS/tvOS/watchOS without a host app, so those rows
+# are build-only. The `os(macOS) || os(iOS) || os(tvOS) || os(watchOS)`
+# guards in `OSLogHandler.swift` and `LoggingMiddleware.swift` are exercised
+# end-to-end by the macOS/Linux test rows; the simulator rows prove the
+# whole thing compiles for each Apple SDK.
+
 jobs:
   linux:
     name: Swift ${{ matrix.swift }} on Linux
@@ -18,17 +31,29 @@ jobs:
       image: swift:${{ matrix.swift }}
     steps:
       - uses: actions/checkout@v4
-      - name: swift build
-        run: swift build
-      - name: swift test
-        run: swift test --parallel
+      - run: swift build
+      - run: swift test --parallel
 
   macos:
     name: Swift on macOS
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - name: swift build
-        run: swift build
-      - name: swift test
-        run: swift test --parallel
+      - run: swift build
+      - run: swift test --parallel
+
+  apple-platforms:
+    name: ${{ matrix.platform }} build verification
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: ["iOS Simulator", "tvOS Simulator", "watchOS Simulator"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: xcodebuild build (${{ matrix.platform }})
+        run: |
+          xcodebuild -scheme OpenAPILoggingMiddleware \
+            -destination 'generic/platform=${{ matrix.platform }}' \
+            -skipPackagePluginValidation \
+            build

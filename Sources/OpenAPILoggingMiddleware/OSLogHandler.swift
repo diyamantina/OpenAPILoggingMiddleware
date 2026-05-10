@@ -1,7 +1,7 @@
 import Foundation
 import Logging
 
-#if canImport(OSLog)
+#if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)
 import OSLog
 
 /// A `LogHandler` that forwards log events to Apple's unified logging system
@@ -22,7 +22,10 @@ import OSLog
 /// once — see ``LoggingMiddleware/defaultLogger(logPrefix:jsonLogFileName:)``
 /// for the bundled multiplex set.
 ///
-/// - Note: Available on Apple platforms only (`canImport(OSLog)` guarded).
+/// - Note: Available on Apple platforms only — gated by
+///   `#if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)`. On Linux the
+///   type does not exist and consumers should compose with
+///   ``PrefixedStreamLogHandler`` and/or ``JSONFileLogHandler`` instead.
 ///
 /// ## Topics
 ///
