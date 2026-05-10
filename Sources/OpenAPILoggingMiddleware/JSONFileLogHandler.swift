@@ -2,7 +2,29 @@ import Foundation
 import Logging
 
 /// A `LogHandler` that appends structured log entries to a JSON array on disk.
-/// The file is rewritten atomically on each log; suitable for low-volume use.
+///
+/// ## Overview
+///
+/// Each `log(...)` call serialises the level, label, message, and metadata
+/// into a JSON object and appends it to a JSON array file at a configured
+/// location. The file is opened on init, kept open for the lifetime of the
+/// handler, and closed in `deinit`. The format is one JSON array per file;
+/// individual records are appended without rewriting the entire file.
+///
+/// Use this handler when you want a machine-readable record of every request
+/// / response that crossed the middleware (post-mortem replay, offline log
+/// analysis, attaching to bug reports). For real-time observation pair it
+/// with ``ObserverLogHandler`` instead, and for human-readable console
+/// output use ``PrefixedStreamLogHandler``.
+///
+/// - Important: This handler writes synchronously on the calling thread.
+///   It is suitable for low-to-moderate request volume; behind a
+///   high-throughput service, prefer a buffered/async logging strategy.
+///
+/// ## Topics
+///
+/// ### Creating the handler
+/// - ``init(label:logFileURL:logPrefix:)``
 public final class JSONFileLogHandler: LogHandler {
     let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
 
@@ -13,6 +35,19 @@ public final class JSONFileLogHandler: LogHandler {
     nonisolated(unsafe) private var _logLevel: Logger.Level = .info
     private let logPrefix: String
 
+    /// Creates a handler bound to a specific JSON log file.
+    ///
+    /// The file is created (empty) if it does not yet exist; otherwise it is
+    /// opened for writing and new entries are appended to the existing JSON
+    /// array. The file is closed automatically on `deinit`.
+    ///
+    /// - Parameters:
+    ///   - label: A short identifier for the logger; surfaced in each entry.
+    ///   - logFileURL: Absolute file URL where the JSON array should be
+    ///     written. The caller is responsible for choosing an appropriate
+    ///     directory (e.g. a per-app sandbox subfolder).
+    ///   - logPrefix: Optional string included in entries for visual
+    ///     distinction across multiplexed handlers.
     public init(label: String, logFileURL: URL, logPrefix: String = "") {
         self.label = label
         self.logFileURL = logFileURL

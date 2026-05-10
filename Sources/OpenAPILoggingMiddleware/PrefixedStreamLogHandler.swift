@@ -4,14 +4,45 @@ import Logging
 /// A `LogHandler` that writes formatted metadata lines to any `TextOutputStream`
 /// (stdout by default), prefixing each line with an optional string.
 ///
-/// Renamed from `StreamLogHandler` in v1.2.0 to avoid collision with
-/// `Logging.StreamLogHandler.standardOutput` from swift-log.
+/// ## Overview
+///
+/// `PrefixedStreamLogHandler` is a drop-in replacement for swift-log's
+/// `StreamLogHandler.standardOutput` that adds a per-line prefix and formats
+/// metadata in `key = value` form. Use it when you want OpenAPI request /
+/// response activity in your console output, with a visual marker
+/// distinguishing client-side from server-side lines:
+///
+///     PrefixedStreamLogHandler(label: "client", logPrefix: "🟦 ")
+///     PrefixedStreamLogHandler(label: "server", logPrefix: "🟧 ")
+///
+/// Header collections (`*-headers-array`, `*-headers-json`) are unpacked into
+/// one log line per header so headers stay greppable.
+///
+/// - Note: Renamed from `StreamLogHandler` in v1.2.0 to avoid collision with
+///   `Logging.StreamLogHandler.standardOutput` from swift-log.
+///
+/// ## Topics
+///
+/// ### Creating the handler
+/// - ``init(label:stream:logPrefix:)``
+///
+/// ### Companion stream
+/// - ``StandardOutputStream``
 public final class PrefixedStreamLogHandler: LogHandler {
     private let label: String
     nonisolated(unsafe) private var _logLevel: Logger.Level = .info
     nonisolated(unsafe) public var stream: TextOutputStream
     private let logPrefix: String
 
+    /// Creates a new handler.
+    ///
+    /// - Parameters:
+    ///   - label: A short identifier for the logger; carried into output for
+    ///     consistency with `Logging.LogHandler` semantics.
+    ///   - stream: The destination for log lines. Defaults to stdout via
+    ///     ``StandardOutputStream``.
+    ///   - logPrefix: Optional string prepended to every line. Useful for
+    ///     visually distinguishing client vs server log output.
     public init(label: String, stream: TextOutputStream = StandardOutputStream(), logPrefix: String = "") {
         self.label = label
         self.stream = stream
@@ -44,7 +75,6 @@ public final class PrefixedStreamLogHandler: LogHandler {
 
             if key == LogMetadataKey.responseHeadersArray.rawValue || key == LogMetadataKey.requestHeadersArray.rawValue {
                 self.stream.write("\(logPrefix)\(key) Headers:\n")
-                // Convert headers from array of strings to a dictionary
                 let headerArrayString = value.description
                 let headerDictionary = headerArrayString.convertHeaderStringToDictionary()
 
@@ -66,10 +96,17 @@ public final class PrefixedStreamLogHandler: LogHandler {
     }
 }
 
-/// Wraps Swift's `print(_:terminator:)` as a `TextOutputStream`. Default target
-/// for `PrefixedStreamLogHandler`.
+/// `TextOutputStream` that wraps Swift's `print(_:terminator:)` and writes to
+/// the host process's standard output.
+///
+/// Default destination for ``PrefixedStreamLogHandler``. Substitute your own
+/// `TextOutputStream` (a buffer, a file, a network socket) at construction
+/// time to redirect output without changing the handler.
 public struct StandardOutputStream: TextOutputStream, @unchecked Sendable {
+    /// Creates a new stream. No configuration.
     public init() {}
+
+    /// Writes the given string to standard output without a trailing newline.
     public func write(_ string: String) {
         print(string, terminator: "")
     }

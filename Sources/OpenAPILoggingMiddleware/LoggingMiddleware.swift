@@ -3,22 +3,126 @@ import Foundation
 import HTTPTypes
 import Logging
 
+/// OpenAPI middleware that logs each request and response on both the client
+/// and the server, with optional body capture governed by a configurable
+/// ``BodyLoggingPolicy``.
+///
+/// ## Overview
+///
+/// `LoggingMiddleware` conforms to both `OpenAPIRuntime.ClientMiddleware`
+/// and `OpenAPIRuntime.ServerMiddleware`, so a single instance can be wired
+/// into the client side (via the generated `Client(middlewares:)` array) and
+/// the server side (via `registerHandlers(on:middlewares:)` produced by the
+/// OpenAPI generator). Pair it with the bundled handlers for a useful
+/// out-of-the-box logging stack:
+///
+/// - ``PrefixedStreamLogHandler`` writes one line per metadata key to stdout.
+/// - ``JSONFileLogHandler`` appends a structured JSON record per request to
+///   a file on disk.
+/// - ``OSLogHandler`` (Apple platforms) forwards to the unified log.
+/// - ``ObserverLogHandler`` pipes events into a closure (use this for live
+///   admin dashboards, WebSocket broadcasts, or test harnesses).
+///
+/// The actor is `Sendable` and safe to share across concurrent intercepts.
+///
+///     let middleware = LoggingMiddleware(appName: "MyAPI", logPrefix: "🟦 ")
+///
+///     let client = Client(
+///         serverURL: serverURL,
+///         transport: AsyncHTTPClientTransport(),
+///         middlewares: [middleware]
+///     )
+///
+/// On the server side:
+///
+///     try handler.registerHandlers(
+///         on: transport,
+///         serverURL: try Servers.Server1.url(),
+///         middlewares: [middleware]
+///     )
+///
+/// ## Topics
+///
+/// ### Creating the middleware
+/// - ``init(logger:bodyLoggingConfiguration:appName:logPrefix:requestLogLevel:responseLogLevel:errorLogLevel:)``
+///
+/// ### Inspecting configuration
+/// - ``bodyLoggingPolicy``
+/// - ``logPrefix``
+/// - ``appName``
+/// - ``requestLogLevel``
+/// - ``responseLogLevel``
+/// - ``errorLogLevel``
+///
+/// ### Default logger
+/// - ``defaultLogger(logPrefix:jsonLogFileName:)``
+///
+/// ### Companion types
+/// - ``BodyLoggingPolicy``
+/// - ``ObserverLogHandler``
+/// - ``PrefixedStreamLogHandler``
+/// - ``JSONFileLogHandler``
 public actor LoggingMiddleware {
 
     // MARK: Properties -
 
     private let logger: Logger
+
+    /// Active body logging policy. See ``BodyLoggingPolicy``.
     public let bodyLoggingPolicy: BodyLoggingPolicy
+
+    /// String prepended to every log line written by the bundled handlers.
+    /// Use this to visually distinguish client output from server output in
+    /// a mixed app/server build (e.g. `"🟦 client"` vs `"🟧 server"`).
     public let logPrefix: String
+
+    /// Application identifier used to derive the JSON log file name. When
+    /// `nil`, the middleware uses ``logPrefix`` (or `"OpenAPILog"`) instead.
     public let appName: String?
+
+    /// Log level used for the per-request log line. Defaults to `.debug`.
     public let requestLogLevel: Logger.Level
+
+    /// Log level used for the per-response log line. Defaults to `.debug`.
     public let responseLogLevel: Logger.Level
+
+    /// Log level used when the next responder throws. Defaults to `.error`.
     public let errorLogLevel: Logger.Level
     private let logFileName: String
     private let jsonLogFileName: String
 
     // MARK: init -
 
+    /// Creates a logging middleware ready to drop into a client or server
+    /// `middlewares:` array.
+    ///
+    /// All parameters have sensible defaults; a parameter-less call gives
+    /// you a 2 MiB body cap, debug-level request/response logging, error-
+    /// level fault logging, and the default multiplex of stream + JSON file
+    /// + OSLog handlers.
+    ///
+    /// - Parameters:
+    ///   - logger: An explicit `Logger` to write through. When `nil`, the
+    ///     middleware constructs one via
+    ///     ``defaultLogger(logPrefix:jsonLogFileName:)`` so the standard
+    ///     bundled handlers are wired in. Pass your own `Logger` (typically
+    ///     a `Logger(label:factory:)` returning a `MultiplexLogHandler`)
+    ///     to layer additional handlers — for example
+    ///     ``ObserverLogHandler`` for a live admin dashboard.
+    ///   - bodyLoggingConfiguration: Policy for whether/how to log request
+    ///     and response bodies. Defaults to `.upTo(maxBytes: 2 MiB)`.
+    ///   - appName: Identifier used to derive the JSON log file name. When
+    ///     `nil`, the middleware falls back to `logPrefix` and finally to a
+    ///     generic `"OpenAPILog"`.
+    ///   - logPrefix: String prepended to every line written by the bundled
+    ///     handlers. Useful for visually distinguishing multiple middleware
+    ///     instances in the same console.
+    ///   - requestLogLevel: Log level for the per-request entry. Default
+    ///     `.debug`.
+    ///   - responseLogLevel: Log level for the per-response entry. Default
+    ///     `.debug`.
+    ///   - errorLogLevel: Log level used when the next responder throws.
+    ///     Default `.error`.
     public init(logger: Logger? = nil,
                 bodyLoggingConfiguration: BodyLoggingPolicy = .upTo(maxBytes: 1024 * 1024 * 2),
                 appName: String? = nil,
@@ -91,9 +195,22 @@ public actor LoggingMiddleware {
 
     // MARK: Default Logger -
 
-    /// Build the default Logger used when no `logger` is passed to `init`.
-    /// Exposed as public so consumers can start from the built-in handler set
-    /// and layer their own handlers on top via `Logging.MultiplexLogHandler`.
+    /// Build the default `Logger` used when no `logger` is passed to the
+    /// designated initialiser ``LoggingMiddleware/init(logger:bodyLoggingConfiguration:appName:logPrefix:requestLogLevel:responseLogLevel:errorLogLevel:)``.
+    ///
+    /// Exposed as public so consumers can start from the built-in handler
+    /// set and layer their own handlers on top via
+    /// `Logging.MultiplexLogHandler`. The default set is:
+    /// - ``PrefixedStreamLogHandler`` (stdout)
+    /// - ``JSONFileLogHandler`` (file in the user's documents directory)
+    /// - ``OSLogHandler`` (Apple platforms only)
+    ///
+    /// - Parameters:
+    ///   - logPrefix: String prepended to each line written by the bundled
+    ///     handlers.
+    ///   - jsonLogFileName: File name used by the JSON handler. The file
+    ///     lands in the system documents directory.
+    /// - Returns: A `Logger` ready to pass to ``init(logger:bodyLoggingConfiguration:appName:logPrefix:requestLogLevel:responseLogLevel:errorLogLevel:)``.
     public static func defaultLogger(logPrefix: String = "", jsonLogFileName: String = "OpenAPILog.json") -> Logger {
         let label = "com.openapi.logger"
 

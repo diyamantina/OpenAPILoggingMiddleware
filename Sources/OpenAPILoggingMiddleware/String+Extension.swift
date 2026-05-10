@@ -38,10 +38,15 @@ extension String {
         }
     }
 
-    /// Converts a JSON string into a dictionary.
+    /// Decodes the receiver as a JSON object string into a `[String: Any]`
+    /// dictionary.
     ///
-    /// - Parameter jsonString: The JSON string to convert.
-    /// - Returns: An optional dictionary if conversion is successful, otherwise `nil`.
+    /// Used internally by the bundled log handlers to expand
+    /// `request-headers-json` / `response-headers-json` metadata back into
+    /// individual key/value pairs at log time.
+    ///
+    /// - Returns: The decoded dictionary, or `nil` if the string is not
+    ///   valid UTF-8 or does not parse to a JSON object.
     public func meAsJSONStringToDictionary() -> [String: Any]? {
         // Attempt to convert the JSON string into a dictionary
         guard let data = self.data(using: .utf8),
