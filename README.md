@@ -125,7 +125,7 @@ and the four bundled handlers.
 
 ## Testing
 
-The package ships with **48 tests across 9 suites**:
+The package ships with **53 tests across 10 suites**:
 
 | Area | Tests |
 |---|---|
@@ -136,6 +136,7 @@ The package ships with **48 tests across 9 suites**:
 | `PrefixedStreamLogHandler` (formatting, custom streams) | 5 |
 | `String+Extension` (header parsing, JSON conversion) | 5 |
 | `LoggingMiddleware` (client + server intercept paths) | 4 |
+| `LoggingMiddleware: client + server semantics` (gap-fillers: events, body policy at middleware level, single-pass body re-wrap) | 5 |
 | `Date` / time formatting | 2 |
 | Public API surface (visibility + Sendable conformance) | 2 |
 
