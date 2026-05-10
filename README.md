@@ -150,10 +150,30 @@ and the four bundled handlers.
 - [`mihaelamj/ClientIpMiddleware`](https://github.com/mihaelamj/ClientIpMiddleware)
   — captures client IP and User-Agent into task-locals so OpenAPI-generated
   handlers can read them.
+- [`mihaelamj/swift-server-middleware-petshop`](https://github.com/mihaelamj/swift-server-middleware-petshop)
+  end-to-end integration tests for all three middlewares composed inside
+  a real Vapor + OpenAPI 3.1 app, with macOS + Linux CI.
+
+## Platform support
+
+| Platform | How CI proves it |
+|---|---|
+| macOS 13+ | full `swift build` + `swift test` (74 tests) |
+| Linux (Swift 6.0 container) | full `swift build` + `swift test` (74 tests) |
+| iOS 16+ | `xcodebuild build` for `iOS Simulator` |
+| tvOS 16+ | `xcodebuild build` for `tvOS Simulator` |
+| watchOS 9+ | `xcodebuild build` for `watchOS Simulator` |
+
+Apple-only types (`OSLogHandler`, `OSAllocatedUnfairLock`-backed
+`StateLock`) are gated by explicit `#if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)`
+in the source. On Linux the `StateLock` falls back to an `NSLock`-backed
+class with the same `withLock(_:)` surface; `OSLogHandler` does not exist
+and consumers compose with `PrefixedStreamLogHandler` and/or
+`JSONFileLogHandler` instead.
 
 ## Testing
 
-The package ships with **65 tests across 11 suites**:
+The package ships with **74 tests across 12 suites**:
 
 | Area | Tests |
 |---|---|
@@ -166,6 +186,7 @@ The package ships with **65 tests across 11 suites**:
 | `LoggingMiddleware` (client + server intercept paths) | 4 |
 | `LoggingMiddleware: client + server semantics` (gap-fillers: events, body policy at middleware level, single-pass body re-wrap) | 5 |
 | `JSONFileLogHandler` (writes to user-supplied URL, intermediate dir creation, Linux-friendly default path) | 3 |
+| `LoggingMiddleware: adversarial / robustness` (no-Authorization no-op, Cookie/Set-Cookie default redaction, repeated headers, custom set, body re-wrap, oversize body truncation, 200/500-fold concurrent stress, 1 MB header value) | 9 |
 | `Date` / time formatting | 2 |
 | Public API surface (visibility + Sendable conformance) | 2 |
 
