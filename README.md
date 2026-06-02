@@ -196,6 +196,24 @@ Run with `swift test`.
 
 CI runs the suite on macOS and on Linux (Swift 6.0 container).
 
+## Contributing
+
+Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for
+the development setup, style, and PR process, and open an issue before starting
+anything non-trivial. Bug reports and feature requests use the templates under
+**New issue**.
+
+## Security
+
+To report a vulnerability, use GitHub's private **Report a vulnerability** flow
+or email **mihaelamj@me.com**. Do not open a public issue. Details and the
+supported-version policy are in [SECURITY.md](SECURITY.md).
+
+## Code of conduct
+
+This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). By
+participating you agree to uphold it.
+
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+MIT — see [LICENSE](LICENSE).

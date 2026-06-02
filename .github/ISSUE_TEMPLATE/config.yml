@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/mihaelamj/OpenAPILoggingMiddleware/security/advisories/new
+    about: Report a vulnerability privately. Do not file security issues in public.
+  - name: Question or discussion
+    url: https://github.com/mihaelamj/OpenAPILoggingMiddleware/discussions
+    about: Ask usage questions or discuss ideas before filing an issue.
