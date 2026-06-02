@@ -4,6 +4,48 @@ All notable changes to this project will be documented in this file. Earlier
 releases are reconstructed from git history; the entries from 1.2.0 onward are
 authoritative going forward.
 
+## [1.3.1] — 2026-06-02
+
+No library code or public API changed in this release; `Sources/` and
+`Package.swift` are identical to 1.3.0. Repository and documentation only.
+
+### Added
+- Community health files: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`
+  (Contributor Covenant 2.1), `SECURITY.md`, GitHub issue forms
+  (bug report / feature request) with a config that routes security reports to
+  the private advisory flow, and a pull-request template.
+
+### Changed
+- CI is split into dedicated `Linux` and `Apple` workflows (previously one
+  combined `test` workflow), each with its own status badge in the README.
+
+### Fixed
+- README license section corrected from "Apache 2.0" to **MIT**, matching the
+  `LICENSE` file (which has always been MIT).
+
+## [1.3.0] — 2026-05-10
+
+### Added
+- **Cross-platform `StateLock`.** Aliases `os.OSAllocatedUnfairLock` on Apple
+  platforms and falls back to an `NSLock`-backed shim on Linux, exposing the
+  same `withLock(_:)` surface so handlers stay thread-safe everywhere.
+- **Header redaction.** A default set of sensitive headers (`Authorization`,
+  `Cookie`, `Set-Cookie`) is redacted in logs, with `redacted(redacting:)` on
+  `HTTPFields` and a configurable redaction set.
+- **Adversarial / robustness test suite** (+9 tests) plus gap-filler suites,
+  bringing the package to 74 tests across 12 suites.
+- **Five-platform CI** covering Linux, macOS, iOS, tvOS, and watchOS.
+
+### Changed
+- Explicit `#if os(...)` / `#if canImport(...)` gating in `OSLogHandler` and
+  `LoggingMiddleware`; expanded declared platform support.
+- `JSONFileLogHandler` writes to a user-supplied URL, creates intermediate
+  directories, and uses a Linux-friendly default path.
+
+### Fixed
+- Response-headers logging path, single-pass body re-wrap, and oversize body
+  truncation.
+
 ## [1.2.2] — 2026-04-27
 
 ### Fixed
