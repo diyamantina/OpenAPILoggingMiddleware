@@ -1,5 +1,7 @@
 # OpenAPILoggingMiddleware
 
+[![Linux](https://github.com/mihaelamj/OpenAPILoggingMiddleware/actions/workflows/linux.yml/badge.svg)](https://github.com/mihaelamj/OpenAPILoggingMiddleware/actions/workflows/linux.yml)
+[![Apple](https://github.com/mihaelamj/OpenAPILoggingMiddleware/actions/workflows/apple.yml/badge.svg)](https://github.com/mihaelamj/OpenAPILoggingMiddleware/actions/workflows/apple.yml)
 ![Swift 6.0+](https://img.shields.io/badge/Swift-6.0+-orange.svg)
 ![Platforms](https://img.shields.io/badge/Platforms-macOS%2013+%20%7C%20iOS%2016+%20%7C%20Linux-blue.svg)
 
