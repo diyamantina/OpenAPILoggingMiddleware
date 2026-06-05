@@ -5,10 +5,20 @@
 ![Swift 6.0+](https://img.shields.io/badge/Swift-6.0+-orange.svg)
 ![Platforms](https://img.shields.io/badge/Platforms-macOS%2013+%20%7C%20iOS%2016+%20%7C%20Linux-blue.svg)
 
-OpenAPI middleware that logs each request and response on both the client and
-the server side, with optional body capture, multiple bundled log handlers
-(stream, JSON file, OSLog, observer), and a pluggable architecture so you can
-ship log events anywhere.
+Request and response logging middleware for Swift OpenAPI clients and servers.
+
+`OpenAPILoggingMiddleware` conforms to both OpenAPI client and server
+middleware protocols, so the same package can log generated client calls,
+generated server handlers, or both. It supports bounded body capture, default
+credential-header redaction, and several bundled log handlers for stream, JSON
+file, OSLog, and observer-based pipelines.
+
+Use it when you need:
+
+- Debuggable OpenAPI traffic on the client, server, or both.
+- Request and response metadata without leaking bearer tokens or cookies.
+- Optional body logging with a byte cap.
+- A testable observer hook for dashboards, integration tests, or live tooling.
 
 ## Installation
 
@@ -25,32 +35,33 @@ ship log events anywhere.
 ),
 ```
 
-## Quick start
+## Quick Start
 
 ```swift
 import OpenAPILoggingMiddleware
 import OpenAPIAsyncHTTPClient
 
-let logging = LoggingMiddleware(appName: "MyAPI", logPrefix: "🟦 ")
+let logging = LoggingMiddleware(appName: "MyAPI", logPrefix: "client ")
 
-// Client side
 let client = Client(
     serverURL: serverURL,
     transport: AsyncHTTPClientTransport(),
     middlewares: [logging]
 )
+```
 
-// Server side — same instance, same actor
+Use the same middleware type on the generated server side:
+
+```swift
 try handler.registerHandlers(
     on: transport,
     serverURL: try Servers.Server1.url(),
-    middlewares: [logging]
+    middlewares: [LoggingMiddleware(appName: "MyAPI", logPrefix: "server ")]
 )
 ```
 
-That gives you stream output to stdout, a JSON record per request appended to
-a file in your documents directory, and (on Apple platforms) entries in the
-unified log — all out of the box.
+The default logger writes stream output, appends JSON records to a temporary
+file, and uses OSLog on Apple platforms.
 
 ## Configuration
 
@@ -67,72 +78,93 @@ public init(
 )
 ```
 
-| Parameter | Default | Notes |
+| Parameter | Default | Purpose |
 |---|---|---|
-| `logger` | `nil` (uses `defaultLogger`) | Pass your own `Logger` to layer custom handlers via `MultiplexLogHandler`. |
-| `bodyLoggingConfiguration` | `.upTo(maxBytes: 2 MiB)` | Pick `.never` to redact every body, or `.upTo(maxBytes:)` with your own cap. |
-| `appName` | `nil` | Identifier used to derive the JSON log file name. Falls back to `logPrefix`, then to `OpenAPILog`. |
-| `logPrefix` | `""` | Prepended to every line. Useful for distinguishing client vs server output (`"🟦 "` vs `"🟧 "`). |
-| `requestLogLevel` | `.debug` | Per-request log line. |
-| `responseLogLevel` | `.debug` | Per-response log line. |
-| `errorLogLevel` | `.error` | Used when the next responder throws. |
-| `redactedHeaderFields` | `[.authorization, .proxyAuthorization, .cookie, .setCookie]` | Header values replaced by `"<redacted>"` before being written to log metadata. Pass `[]` to disable, or extend the default set with your own sensitive names (e.g. `X-Api-Key`). |
+| `logger` | default multiplex logger | Pass your own `Logger` to route events to custom log handlers. |
+| `bodyLoggingConfiguration` | `.upTo(maxBytes: 2 MiB)` | Controls whether request/response bodies are logged and how much is captured. |
+| `appName` | `nil` | Used to derive the JSON log file name. |
+| `logPrefix` | `""` | Prepended to emitted log lines. Useful for distinguishing client and server instances. |
+| `requestLogLevel` | `.debug` | Log level for request entries. |
+| `responseLogLevel` | `.debug` | Log level for response entries. |
+| `errorLogLevel` | `.error` | Log level when the next middleware or transport throws. |
+| `redactedHeaderFields` | auth and cookie headers | Header names whose values are replaced by `"<redacted>"` before logging. |
 
-## Header redaction
+## Header Redaction
 
-`Authorization`, `Proxy-Authorization`, `Cookie`, and `Set-Cookie` are replaced
-by `"<redacted>"` in the rendered request/response header JSON before it
-reaches any `LogHandler`. This closes the leak channel where a permissive
-`BodyLoggingPolicy` plus a downstream observer would otherwise stamp valid
-bearer tokens or session cookies into log files.
+The default redaction set covers:
+
+- `Authorization`
+- `Proxy-Authorization`
+- `Cookie`
+- `Set-Cookie`
 
 ```swift
-// Default — redacts the four common credential headers
-let lm1 = LoggingMiddleware(appName: "api")
+// Default credential-header redaction.
+let normal = LoggingMiddleware(appName: "api")
 
-// Disable redaction (not recommended in production)
-let lm2 = LoggingMiddleware(appName: "api", redactedHeaderFields: [])
-
-// Extend the default set with an extra header
-let lm3 = LoggingMiddleware(
+// Extend the default set.
+let strict = LoggingMiddleware(
     appName: "api",
     redactedHeaderFields: LoggingMiddleware.defaultRedactedHeaderFields
         .union([HTTPField.Name("X-Api-Key")!])
 )
+
+// Disable redaction. Avoid this in production.
+let unsafe = LoggingMiddleware(appName: "api", redactedHeaderFields: [])
 ```
 
-Use `HTTPFields.redacted(redacting:)` directly when you need the same scrub
-in your own log paths.
+Use `HTTPFields.redacted(redacting:)` when your own logging code needs the same
+scrubbing behavior.
 
-## Body logging
+## Body Logging
 
-`BodyLoggingPolicy` is the single switch for whether and how request/response
-bodies appear in logs:
+`BodyLoggingPolicy` decides how request and response bodies are handled:
 
-| Policy | Behaviour |
+| Policy | Behavior |
 |---|---|
-| `.never` | Redact every body unconditionally. |
-| `.upTo(maxBytes:)` | Log bodies of known length up to the cap; bodies of unknown length are buffered up to the cap and logged in full. Bodies that exceed the cap are surfaced as `<N bytes>`. |
+| `.never` | Redacts every body. |
+| `.upTo(maxBytes:)` | Logs bodies up to the cap. Oversized bodies are summarized as `<N bytes>`. |
 
-The middleware re-wraps any consumed body (`HTTPBody` is a single-pass stream)
-before forwarding to the next responder, so logging never strips a body the
-consumer was about to read.
+When the middleware consumes a body to log it, it re-wraps the bytes in a fresh
+`HTTPBody` before forwarding. Downstream middleware and handlers still receive a
+readable body.
 
-## Bundled log handlers
+## Bundled Log Handlers
 
 | Handler | Purpose |
 |---|---|
-| `PrefixedStreamLogHandler` | One line per metadata key on stdout (or any `TextOutputStream` you supply). Renamed from `StreamLogHandler` in 1.2.0 to avoid collision with swift-log's own `StreamLogHandler`. |
-| `JSONFileLogHandler` | Appends a structured JSON record per request to the user-supplied URL. Suitable for low-to-moderate volume. The default location used by `LoggingMiddleware` is under `FileManager.default.temporaryDirectory`, which exists on every supported platform. |
-| `OSLogHandler` | Forwards to Apple's unified logging system. Apple platforms only — guarded by `#if canImport(OSLog)` so Linux builds skip it. |
-| `ObserverLogHandler` | Forwards every log event to a user-supplied closure. Pipe to admin dashboards, WebSocket broadcasts, analytics pipelines, or test harnesses. Thread-safe via `StateLock`, which aliases to `os.OSAllocatedUnfairLock` on Apple platforms and uses an `NSLock`-backed shim on Linux. |
+| `PrefixedStreamLogHandler` | Writes readable metadata lines to stdout or another `TextOutputStream`. |
+| `JSONFileLogHandler` | Appends one structured JSON record per request to a file. |
+| `OSLogHandler` | Forwards events to Apple's unified logging system. Apple platforms only. |
+| `ObserverLogHandler` | Sends every log event to a closure for dashboards, tests, WebSocket streams, or analytics hooks. |
 
-Compose them at boot with `Logging.MultiplexLogHandler` and pass the resulting
-`Logger` into `LoggingMiddleware(logger: ...)`.
+Pass a custom `Logger` when you want to compose your own handler stack with
+`Logging.MultiplexLogHandler`.
+
+## Companion Packages
+
+- [`BearerTokenAuthMiddleware`](https://github.com/mihaelamj/BearerTokenAuthMiddleware)
+  stamps bearer tokens on generated OpenAPI clients and enforces bearer tokens
+  in Vapor servers.
+- [`ClientIpMiddleware`](https://github.com/mihaelamj/ClientIpMiddleware)
+  captures client IP and user-agent context for generated OpenAPI handlers.
+
+## Platform Support
+
+| Platform | CI coverage |
+|---|---|
+| macOS 13+ | `swift build` and `swift test` |
+| Linux, Swift 6.0 container | `swift build` and `swift test` |
+| iOS 16+ | `xcodebuild build` for iOS Simulator |
+| tvOS 16+ | `xcodebuild build` for tvOS Simulator |
+| watchOS 9+ | `xcodebuild build` for watchOS Simulator |
+
+`OSLogHandler` is Apple-only. Linux consumers can compose
+`PrefixedStreamLogHandler`, `JSONFileLogHandler`, and `ObserverLogHandler`.
 
 ## Documentation
 
-DocC is enabled. Generate the archive locally with:
+DocC is enabled:
 
 ```bash
 swift package --allow-writing-to-directory ./docs generate-documentation \
@@ -140,80 +172,29 @@ swift package --allow-writing-to-directory ./docs generate-documentation \
     --output-path ./docs/OpenAPILoggingMiddleware.doccarchive
 ```
 
-The archive opens in Xcode (or via `xcrun docc preview-documentation`) and
-exposes Topics-grouped navigation across `LoggingMiddleware`, `BodyLoggingPolicy`,
-and the four bundled handlers.
-
-## Companion packages
-
-- [`mihaelamj/BearerTokenAuthMiddleware`](https://github.com/mihaelamj/BearerTokenAuthMiddleware)
-  — client-side bearer-token stamping plus a server-side enforcement
-  middleware with `AuthMode` + validation strategies.
-- [`mihaelamj/ClientIpMiddleware`](https://github.com/mihaelamj/ClientIpMiddleware)
-  — captures client IP and User-Agent into task-locals so OpenAPI-generated
-  handlers can read them.
-- [`mihaelamj/swift-server-middleware-petshop`](https://github.com/mihaelamj/swift-server-middleware-petshop)
-  end-to-end integration tests for all three middlewares composed inside
-  a real Vapor + OpenAPI 3.1 app, with macOS + Linux CI.
-
-## Platform support
-
-| Platform | How CI proves it |
-|---|---|
-| macOS 13+ | full `swift build` + `swift test` (74 tests) |
-| Linux (Swift 6.0 container) | full `swift build` + `swift test` (74 tests) |
-| iOS 16+ | `xcodebuild build` for `iOS Simulator` |
-| tvOS 16+ | `xcodebuild build` for `tvOS Simulator` |
-| watchOS 9+ | `xcodebuild build` for `watchOS Simulator` |
-
-Apple-only types (`OSLogHandler`, `OSAllocatedUnfairLock`-backed
-`StateLock`) are gated by explicit `#if os(macOS) || os(iOS) || os(tvOS) || os(watchOS)`
-in the source. On Linux the `StateLock` falls back to an `NSLock`-backed
-class with the same `withLock(_:)` surface; `OSLogHandler` does not exist
-and consumers compose with `PrefixedStreamLogHandler` and/or
-`JSONFileLogHandler` instead.
-
 ## Testing
 
-The package ships with **74 tests across 12 suites**:
+The package ships with **74 tests across 12 suites** covering:
 
-| Area | Tests |
-|---|---|
-| `BodyLoggingPolicy` (process / never / upTo / BodyLog) | 11 |
-| Integration: `LoggingMiddleware` + `ObserverLogHandler` (concurrency, full intercept paths, header redaction, response-headers fix) | 11 |
-| `HTTPFields+Extension` (toArrayString / toDictionary / toJSONString / `redacted(redacting:)`) | 11 |
-| `ObserverLogHandler` (event delivery, thread-safety, multiplex) | 6 |
-| `PrefixedStreamLogHandler` (formatting, custom streams) | 5 |
-| `String+Extension` (header parsing, JSON conversion) | 5 |
-| `LoggingMiddleware` (client + server intercept paths) | 4 |
-| `LoggingMiddleware: client + server semantics` (gap-fillers: events, body policy at middleware level, single-pass body re-wrap) | 5 |
-| `JSONFileLogHandler` (writes to user-supplied URL, intermediate dir creation, Linux-friendly default path) | 3 |
-| `LoggingMiddleware: adversarial / robustness` (no-Authorization no-op, Cookie/Set-Cookie default redaction, repeated headers, custom set, body re-wrap, oversize body truncation, 200/500-fold concurrent stress, 1 MB header value) | 9 |
-| `Date` / time formatting | 2 |
-| Public API surface (visibility + Sendable conformance) | 2 |
+- Client and server intercept paths.
+- Header redaction.
+- Body logging policy behavior and single-pass body re-wrapping.
+- Stream, JSON file, OSLog-adjacent, and observer handler behavior.
+- Concurrent request stress cases and malformed input handling.
+- Public API and `Sendable` conformance checks.
 
-Run with `swift test`.
+Run them with:
 
-CI runs the suite on macOS and on Linux (Swift 6.0 container).
+```bash
+swift test
+```
 
 ## Contributing
 
-Contributions are welcome. Please read [CONTRIBUTING.md](CONTRIBUTING.md) for
-the development setup, style, and PR process, and open an issue before starting
-anything non-trivial. Bug reports and feature requests use the templates under
-**New issue**.
-
-## Security
-
-To report a vulnerability, use GitHub's private **Report a vulnerability** flow
-or email **mihaelamj@me.com**. Do not open a public issue. Details and the
-supported-version policy are in [SECURITY.md](SECURITY.md).
-
-## Code of conduct
-
-This project follows the [Contributor Covenant](CODE_OF_CONDUCT.md). By
-participating you agree to uphold it.
+Contributions are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for setup,
+style, and PR expectations. Security issues should be reported privately; see
+[SECURITY.md](SECURITY.md).
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
