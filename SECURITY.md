@@ -15,7 +15,7 @@ Do not open a public issue for a security problem.
 
 Use GitHub's private reporting: open the repository's **Security** tab and
 choose **Report a vulnerability**. If that is unavailable, email the
-maintainer at **mihaelamj@me.com** with:
+maintainer at **mihaelamj@gmail.com** with:
 
 - a description of the issue and its impact,
 - steps or a minimal sample that reproduces it,

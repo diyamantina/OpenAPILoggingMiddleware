@@ -31,7 +31,7 @@ Examples of unacceptable behaviour:
 Maintainers are responsible for clarifying these standards and may remove,
 edit, or reject contributions that do not align with them.
 
-Report unacceptable behaviour privately to **mihaelamj@me.com**. All reports
+Report unacceptable behaviour privately to **https://codeberg.org/OpenAPIHQ/OpenAPILoggingMiddleware/issues**. All reports
 are reviewed and handled confidentially. Maintainers will respect the privacy
 and safety of anyone who reports an incident.
 
