@@ -59,7 +59,7 @@ No library code or public API changed in this release; `Sources/` and
   with the same label fanned into the same handler instance — and the host
   served concurrent OpenAPI traffic. The `nonisolated(unsafe)` annotations on
   the storage are gone; the lock owns the state.
-  ([#5](https://github.com/mihaelamj/OpenAPILoggingMiddleware/issues/5))
+  ([#5](https://github.com/diyamantina/OpenAPILoggingMiddleware/issues/5))
 
 ### Added
 - Concurrency stress tests:
@@ -131,5 +131,5 @@ Initial public release. Console / file / OSLog handlers, dual-parameter
 `appName` + `logPrefix` system, Client- and Server-side `intercept`
 implementations.
 
-[#2]: https://github.com/mihaelamj/OpenAPILoggingMiddleware/pull/2
-[#4]: https://github.com/mihaelamj/OpenAPILoggingMiddleware/pull/4
+[#2]: https://github.com/diyamantina/OpenAPILoggingMiddleware/pull/2
+[#4]: https://github.com/diyamantina/OpenAPILoggingMiddleware/pull/4

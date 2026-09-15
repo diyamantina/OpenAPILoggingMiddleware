@@ -16,7 +16,7 @@ Requires Swift 6.0+ (Xcode 16+ on Apple platforms, the Swift 6.0 toolchain on
 Linux).
 
 ```sh
-git clone https://github.com/mihaelamj/OpenAPILoggingMiddleware
+git clone https://github.com/diyamantina/OpenAPILoggingMiddleware
 cd OpenAPILoggingMiddleware
 swift build
 swift test
